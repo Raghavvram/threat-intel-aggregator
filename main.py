@@ -37,7 +37,7 @@ def load_feeds():
     
     return (
         articles, 
-        gr.update(choices=article_titles, value=article_titles[0]), 
+        gr.update(choices=article_titles, value=article_titles[0] if article_titles else None), 
         f"📊 {len(articles)} threat reports loaded"
     )
 
@@ -63,17 +63,8 @@ def update_analysis_view(selected_title, articles_state):
     ioc_stats_text = get_ioc_stats(filtered_iocs)
     
     article_card = f"""
-    <div style="border-left: 4px solid #3b82f6; padding: 16px; background: #f8fafc; border-radius: 8px; margin: 8px 0;">
-        <h3 style="margin: 0 0 8px 0; color: #1e40af;">
-            <a href="{selected_article['link']}" target="_blank" style="text-decoration: none; color: inherit;">
-                {selected_article['title']} ↗
-            </a>
-        </h3>
-        <div style="display: flex; gap: 16px; font-size: 14px; color: #64748b;">
-            <span><strong>Source:</strong> {selected_article['source']}</span>
-            <span><strong>Published:</strong> {selected_article['published_str']}</span>
-        </div>
-    </div>
+### [{selected_article['title']} ↗]({selected_article['link']})
+**Source:** {selected_article['source']} | **Published:** {selected_article['published_str']}
     """
     
     return summary, filtered_iocs, article_card, ioc_stats_text
@@ -81,7 +72,10 @@ def update_analysis_view(selected_title, articles_state):
 
 def create_dashboard():
     with gr.Blocks(
-        theme=gr.themes.Soft(),
+        theme=gr.themes.Soft(
+            primary_hue=gr.themes.colors.blue,
+            secondary_hue=gr.themes.colors.sky
+        ),
         title="Threat Intel Aggregator"
     ) as dashboard:
         
@@ -103,7 +97,7 @@ def create_dashboard():
                         label="Select Report to Analyze",
                         interactive=True
                     )
-                    article_details = gr.HTML("")
+                    article_details = gr.Markdown("")
                 
                 with gr.Group():
                     gr.Markdown("## 🎯 Indicators of Compromise")
@@ -115,7 +109,6 @@ def create_dashboard():
                     gr.Markdown("## 🤖 AI Threat Analysis")
                     summary_output = gr.Markdown(
                         "Select a threat report to view AI-generated analysis.",
-                        elem_id="summary-output",
                         line_breaks=True,
                     )
 
@@ -131,12 +124,13 @@ def create_dashboard():
         for event in load_event_triggers:
             event(
                 fn=load_feeds,
-                inputs=[],
+                inputs=None,
                 outputs=[articles_state, article_dropdown, status_display]
             ).then(
                 fn=update_analysis_view,
                 inputs=[article_dropdown, articles_state],
-                outputs=analysis_outputs
+                outputs=analysis_outputs,
+                show_progress="hidden"
             )
             
     return dashboard
