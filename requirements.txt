@@ -1,0 +1,5 @@
+feedparser
+gradio
+ollama
+beautifulsoup4
+lxml
