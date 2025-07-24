@@ -6,7 +6,22 @@ from modules.summarizer import generate_summary
 from config import FEEDS, OLLAMA_MODEL
 
 
-def process_and_load_feeds():
+def get_ioc_stats(iocs_data):
+    if not iocs_data or not isinstance(iocs_data, dict):
+        return "No IOCs extracted"
+    
+    total_iocs = 0
+    for key, value in iocs_data.items():
+        if key == 'hashes' and isinstance(value, dict):
+            total_iocs += sum(len(h_list) for h_list in value.values())
+        elif isinstance(value, list):
+            total_iocs += len(value)
+    
+    categories = len(iocs_data)
+    return f"🎯 {total_iocs} IOCs across {categories} categories"
+
+
+def load_feeds():
     print("Fetching and processing feeds...")
     articles = fetch_feeds(FEEDS)
     
@@ -14,33 +29,23 @@ def process_and_load_feeds():
         return (
             [], 
             gr.update(choices=[], value=None), 
-            "⚠️ No articles found. Please check feed URLs or network connection.",
-            {},
-            "",
-            "No threat reports available",
-            0
+            "⚠️ No articles found. Please check feed URLs or network connection."
         )
     
     article_titles = [f"{article['published_str']} | {article['title']} ({article['source']})" for article in articles]
     print(f"Fetched {len(articles)} articles.")
     
-    summary, iocs, details = analyze_article(article_titles[0], articles)
-    
     return (
         articles, 
         gr.update(choices=article_titles, value=article_titles[0]), 
-        summary, 
-        iocs, 
-        details,
-        f"📊 {len(articles)} threat reports loaded",
-        len(articles)
+        f"📊 {len(articles)} threat reports loaded"
     )
 
 
-def analyze_article(selected_title, articles_state):
+def update_analysis_view(selected_title, articles_state):
     if not selected_title or not articles_state:
-        return "Select an article to view AI analysis.", {}, ""
-    
+        return "Select an article to view AI analysis.", {}, "", "No IOCs extracted yet"
+
     selected_article = next(
         (article for article in articles_state 
          if f"{article['published_str']} | {article['title']} ({article['source']})" == selected_title), 
@@ -48,14 +53,14 @@ def analyze_article(selected_title, articles_state):
     )
     
     if not selected_article:
-        return "❌ Article not found.", {}, ""
+        return "❌ Article not found.", {}, "", "Error finding article"
     
     print(f"Analyzing: {selected_article['title']}")
     
     summary = generate_summary(selected_article['content'], OLLAMA_MODEL)
     iocs = extract_iocs(selected_article['content'])
-    
     filtered_iocs = {k: v for k, v in iocs.items() if v}
+    ioc_stats_text = get_ioc_stats(filtered_iocs)
     
     article_card = f"""
     <div style="border-left: 4px solid #3b82f6; padding: 16px; background: #f8fafc; border-radius: 8px; margin: 8px 0;">
@@ -71,24 +76,7 @@ def analyze_article(selected_title, articles_state):
     </div>
     """
     
-    return summary, filtered_iocs, article_card
-
-
-def get_ioc_stats(iocs_data):
-    if not iocs_data:
-        return "No IOCs extracted"
-    
-    total_iocs = 0
-    if isinstance(iocs_data, dict):
-        for key, value in iocs_data.items():
-            if key == 'hashes' and isinstance(value, dict):
-                total_iocs += sum(len(h_list) for h_list in value.values())
-            elif isinstance(value, list):
-                total_iocs += len(value)
-    
-    categories = len(iocs_data)
-    
-    return f"🎯 {total_iocs} IOCs across {categories} categories"
+    return summary, filtered_iocs, article_card, ioc_stats_text
 
 
 def create_dashboard():
@@ -130,54 +118,27 @@ def create_dashboard():
                         elem_id="summary-output",
                         line_breaks=True,
                     )
-        
-        def update_ui_after_analysis(selected_title, articles_state):
-            summary, iocs, details = analyze_article(selected_title, articles_state)
-            ioc_stats_text = get_ioc_stats(iocs)
-            return summary, iocs, details, ioc_stats_text
-        
-        refresh_button.click(
-            fn=process_and_load_feeds,
-            inputs=[],
-            outputs=[
-                articles_state, 
-                article_dropdown, 
-                summary_output, 
-                iocs_output, 
-                article_details,
-                status_display,
-                gr.State()
-            ]
-        ).then(
-            fn=lambda iocs: get_ioc_stats(iocs),
-            inputs=[iocs_output],
-            outputs=[ioc_stats]
-        )
+
+        analysis_outputs = [summary_output, iocs_output, article_details, ioc_stats]
         
         article_dropdown.change(
-            fn=update_ui_after_analysis,
+            fn=update_analysis_view,
             inputs=[article_dropdown, articles_state],
-            outputs=[summary_output, iocs_output, article_details, ioc_stats]
+            outputs=analysis_outputs
         )
         
-        dashboard.load(
-            fn=process_and_load_feeds,
-            inputs=[],
-            outputs=[
-                articles_state, 
-                article_dropdown, 
-                summary_output, 
-                iocs_output, 
-                article_details,
-                status_display,
-                gr.State()
-            ]
-        ).then(
-            fn=lambda iocs: get_ioc_stats(iocs),
-            inputs=[iocs_output],
-            outputs=[ioc_stats]
-        )
-    
+        load_event_triggers = [dashboard.load, refresh_button.click]
+        for event in load_event_triggers:
+            event(
+                fn=load_feeds,
+                inputs=[],
+                outputs=[articles_state, article_dropdown, status_display]
+            ).then(
+                fn=update_analysis_view,
+                inputs=[article_dropdown, articles_state],
+                outputs=analysis_outputs
+            )
+            
     return dashboard
 
 
