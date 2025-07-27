@@ -46,4 +46,5 @@ Open your web browser and navigate to the local URL provided (usually `http://12
 
 The application will automatically fetch feeds on startup. You can use the **"Fetch Latest Feeds"** button to refresh the data at any time.
 
-![Dashboard Screenshot](https://i.imgur.com/example.png)  ````
+![Dashboard Screenshot](https://raw.githubusercontent.com/Raghavvram/threat-intel-aggregator/refs/heads/main/asserts/Threat-intel-aggreator.png)
+
