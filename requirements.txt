@@ -3,3 +3,4 @@ gradio
 ollama
 beautifulsoup4
 lxml
+streamlit
